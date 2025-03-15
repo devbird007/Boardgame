@@ -46,5 +46,16 @@ jobs:
 
     - name: Show SonarQube Quality Gate Status value
       run: echo "The Quality Gate status is ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
+
+      # Building and pushing the Docker image
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker Image
+      run: |
+        docker build -t mannyops/boardgame:latest .
       
         
