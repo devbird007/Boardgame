@@ -7,6 +7,11 @@ on:
       - 'main'
     tags:
       - 'v*'
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
 
 jobs:
   build:
@@ -96,6 +101,9 @@ jobs:
         load: true
 
     - name: Trivy Image Scan
+      # This next line shouldn't be here in a production environment 
+      # as you want your pipeline to fail if you see high and
+      # critical vulnerabilities in your images.
       continue-on-error: true
       run: |
         trivy image --format table -o trivy-image-report.html --exit-code 1 --severity CRITICAL,HIGH ${{ steps.meta.outputs.tags }}
