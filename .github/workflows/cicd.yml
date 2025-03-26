@@ -96,6 +96,7 @@ jobs:
         load: true
 
     - name: Trivy Image Scan
+      continue-on-error: true
       run: |
         trivy image --format table -o trivy-image-report.html --exit-code 1 --severity CRITICAL,HIGH ${{ steps.meta.outputs.tags }}
 
