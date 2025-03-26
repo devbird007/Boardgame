@@ -1,0 +1,17 @@
+# name: Start and Stop the Runner for Operations
+# 
+# on:
+#   workflow_run:
+#     workflows: []
+#     types:
+#       - requested
+#       - completed
+# 
+# concurrency:
+#   group: start-and-stop-self-hosted-runner
+#   cancel-in-progress: true
+#
+# env:
+#
+# jobs:
+#   action:
