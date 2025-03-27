@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - 'main'
+      - 'release/*'
+      - 'hotfix/*'
     tags:
       - 'v*'
   pull_request:
@@ -16,6 +18,9 @@ on:
 jobs:
   build:
     runs-on: self-hosted
+    ## This next line will run for every event except pull requests. 
+    ## For pull requests, it'd check if they're merged before executing.
+  # if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     steps:
     - uses: actions/checkout@v4
       with:
@@ -81,13 +86,20 @@ jobs:
       with:
         images: ${{ vars.DOCKERHUB_USERNAME }}/boardgame
         tags: |
-          type=ref,event=branch
-          type=ref,event=pr
+          # Production-ready tags
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
+
+          # For internal reference/debugging
           type=sha
+
+          # Environment-specific tags (often with conditionals)
           type=raw,value=latest,enable={{is_default_branch}}
+
+          # Feature branch/PR tagging for testing
+          type=ref,event=branch
+          type=ref,event=pr
 
     - name: Build docker image
       id: docker_build
@@ -95,14 +107,16 @@ jobs:
       with:
         context: .
         file: ./Dockerfile
+        load: true
         push: false
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        load: true
+        cache-from: type=gha # Use Github Actions cache
+        cache-to: type=gha,mode=max
 
     - name: Trivy Image Scan
       # This next line shouldn't be here in a production environment 
-      # as you want your pipeline to fail if you see high and
+      # as you want your pipeline to fail if it sees high and
       # critical vulnerabilities in your images.
       continue-on-error: true
       run: |
@@ -110,10 +124,8 @@ jobs:
 
     - name: Push Docker image to Dockerhub
       if: success()
-      uses: docker/build-push-action@v6
-      with:
-        context: .
-        file: ./Dockerfile
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
+      run: |
+        # Push all tags directly using Docker CLI
+        for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' ');
+          docker push $tag
+        done
