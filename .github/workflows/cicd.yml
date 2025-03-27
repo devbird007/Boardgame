@@ -126,6 +126,6 @@ jobs:
       if: success()
       run: |
         # Push all tags directly using Docker CLI
-        for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' ');
+        for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' '); do
           docker push $tag
         done
