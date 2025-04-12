@@ -110,17 +110,9 @@ jobs:
       # critical vulnerabilities in your images.
       continue-on-error: true
       run: |
-        # Scan using a representative tag. Here, using the SHA tag is reliable as it is always generated.
-        SHA_TAG=$(echo "${{ steps.meta-dev.outputs.tags }}" | grep '^sha-' | head -n 1)
-
-        # Checks if there's a sha tag
-        if [ -z "$SHA_TAG" ]; then
-          echo "No SHA tag found for dev scan";
-          exit 1;
-        fi
-
-        # Actual scan command
-        trivy image --format table -o trivy-image-report.html --exit-code 1 --severity CRITICAL,HIGH ${SHA_TAG}
+      echo "Scanning tags: ${{ steps.meta-dev.outputs.tags }}"
+      # Trivy will attempt to scan all tags passed; may scan same digest multiple times
+      trivy image --format table -o trivy-image-report-dev.html --exit-code 1 --severity CRITICAL,HIGH ${{ steps.meta-dev.outputs.tags }}
 
     - name: Push DEV Docker Image to Dockerhub/DEV-Repository
       # Note: If semantic-release runs before this, you might only want to push if NOT releasing.
