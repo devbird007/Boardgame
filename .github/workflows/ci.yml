@@ -111,7 +111,6 @@ jobs:
       continue-on-error: true
       run: |
         echo "Scanning tags: ${{ steps.meta-dev.outputs.tags }}"
-        # Trivy will attempt to scan all tags passed; may scan same digest multiple times
         trivy image --format table -o trivy-image-report-dev.html --severity CRITICAL,HIGH ${{ steps.meta-dev.outputs.tags }}
 
     - name: Push DEV Docker Image to Dockerhub/DEV-Repository
