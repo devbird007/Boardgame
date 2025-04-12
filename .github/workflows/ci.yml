@@ -1,0 +1,137 @@
+name: Java CI with Maven - Dev Build & Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+      - 'release/*'
+      - 'hotfix/*'
+
+jobs:
+  build-test-and-push:
+
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout Code (Dev)
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Fetches all history and tags for better versioning
+
+    # Set up Java, compile, test and build the artifact
+    - name: Set up JDK 17 (Dev)
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+
+    - name: Build with Maven (Dev)
+      run: mvn -B package --file pom.xml
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Boardgame
+        path: target/*.jar
+    
+    # Scan with Trivy, Scan with Sonarqube and check Quality Gate status
+    - name: Trivy FS Scan (Dev)
+      run: |
+        trivy fs --format table -o trivy-fs-report-dev.html .
+    
+      # --> ADD SEMANTIC-RELEASE STEP(S) HERE LATER <--
+      # Example placeholder:
+      # - name: Semantic Release Trigger
+      #   if: github.ref == 'refs/heads/main' # Only run on main branch pushes
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     # Add other necessary tokens/env vars for semantic-release plugins
+      #   run: npx semantic-release # Assuming Node.js/npx setup
+
+    - name: SonarQube Scan (Dev)
+      uses: SonarSource/sonarqube-scan-action@v5.0.0
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+    - name: Install jq (Dev)
+      run: sudo apt-get update && sudo apt-get install -y jq
+    
+    - name: SonarQube Quality Gate check (Dev)
+      id: sonarqube-quality-gate-check-dev
+      uses: SonarSource/sonarqube-quality-gate-action@v1.1.0
+      timeout-minutes: 3
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+    - name: Show SonarQube Quality Gate Status value (Dev)
+      run: echo "The Quality Gate status is ${{ steps.sonarqube-quality-gate-check-dev.outputs.quality-gate-status }}"
+
+      # --- Docker Steps for DEV Environment
+    - name: Set up QEMU (Dev)
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx (Dev)
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ vars.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+    - name: Extract DEV metadata (tags, labels) for Docker
+      id: meta-dev
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ vars.DOCKERHUB_USERNAME }}/boardgame-dev
+        tags: |
+          type=sha,prefix=sha-,format=short
+          type=ref,event=branch,prefix=branch-
+
+    - name: Build DEV docker image
+      id: docker_build_dev
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ./Dockerfile
+        load: true
+        push: false
+        tags: ${{ steps.meta-dev.outputs.tags }}
+        labels: ${{ steps.meta-dev.outputs.labels }}
+        cache-from: type=gha # Use Github Actions cache
+        cache-to: type=gha,mode=max
+
+    - name: Trivy Image Scan
+      # This next line shouldn't be here in a production environment 
+      # as you want your pipeline to fail if it sees high and
+      # critical vulnerabilities in your images.
+      continue-on-error: true
+      run: |
+        # Scan using a representative tag. Here, using the SHA tag is reliable as it is always generated.
+        SHA_TAG=$(echo "${{ steps.meta-dev.outputs.tags }}" | grep '^sha-' | head -n 1)
+
+        # Checks if there's a sha tag
+        if [ -z "$SHA_TAG" ]; then
+          echo "No SHA tag found for dev scan";
+          exit 1;
+        fi
+
+        # Actual scan command
+        trivy image --format table -o trivy-image-report.html --exit-code 1 --severity CRITICAL,HIGH ${SHA_TAG}
+
+    - name: Push DEV Docker Image to Dockerhub/DEV-Repository
+      # Note: If semantic-release runs before this, you might only want to push if NOT releasing.
+      # but as discussed, pushing the dev SHA is often fine anyway.
+      if: success()
+      run: |
+        echo "--- Pushing DEV Docker Tags ---"
+        echo "${{ steps.meta-dev.outputs.tags }}"
+        echo "------------------------------"
+
+        for tag in $(echo "${{ steps.meta-dev.outputs.tags }}" | tr '\n' ' '); do
+          echo "Pushing dev tag: $tag"
+          docker push "$tag"
+        done

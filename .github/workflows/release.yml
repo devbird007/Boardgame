@@ -1,0 +1,117 @@
+name: JAVA CICD - Release
+
+on:
+  # Triggers ONLY on pushes of tags matching v*
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # Job: Build and Push Release to Production Registry
+  release:
+    name: Release (Tags)
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Code (Release)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for SemVer tag extraction
+
+      - name: Set up JDK 17 (Release)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build with Maven (Release)
+        run: mvn -B package --file pom.xml
+
+      - name: Trivy FS Scan (Release)
+        run: |
+          trivy fs --format table -o trivy-fs-report-release.html .
+
+      - name: SonarQube Scan (Release)
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+      - name: Install jq (Release)
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: SonarQube Quality Gate check (Release)
+        id: sonarqube-quality-gate-check-release
+        uses: SonarSource/sonarqube-quality-gate-action@v1.1.0
+        timeout-minutes: 3
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+      - name: Show SonarQube Quality Gate Status value (Release)
+        run: echo "Release Build - SonarQube Quality Gate status is ${{ steps.sonarqube-quality-gate-check-release.outputs.quality-gate-status }}"
+
+      # --- Docker Steps for PRODUCTION Environment ---
+      - name: Set up QEMU (Release)
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx (Release)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+
+      - name: Extract RELEASE metadata (tags, labels) for Docker
+        id: meta-release
+        uses: docker/metadata-action@v5
+        with:
+          # NOTE: Pushing to the main production image name
+          images: $${{ vars.DOCKERHUB_USERNAME }}/boardgame
+          tags: |
+            type=semver,pattern={{version}}     # v1.2.3
+            type=semver,pattern={{major.minor}} # v1.2
+            type=semver,pattern={{major}}       # v1
+            type=raw,value=latest               # latest
+            type=sha,prefix=sha-,format=short   # sha-a1b2c3d
+
+      - name: Build RELEASE docker image
+        id: docker_build_release
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          push: false
+          tags: ${{ steps.meta-release.outputs.tags }}
+          labels: ${{ steps.meta-release.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy Image Scan (Release)
+        # This next line shouldn't be here in a production environment 
+        # as you want your pipeline to fail if it sees high and
+        # critical vulnerabilities in your images.
+        continue-on-error: true
+        run: |
+          SHA_TAG=$(echo "${{ steps.meta-release.outputs.tags }}" | grep '^sha-' | head -n 1)
+          if [ -z "$SHA_TAG" ]; then
+            echo "No SHA tag found for release scan";
+            exit 1;
+          fi
+          # Fail step (--exit-code 1) if CRITICAL or HIGH vulns found
+          trivy image --format table -o trivy-image-report-release.html --exit-code 1 --severity CRITICAL,HIGH ${SHA_TAG}
+
+      - name: Push RELEASE Docker image to Dockerhub/RELEASE-Repository
+        if: success()
+        run: |
+          echo "--- Pushing RELEASE Docker Tags ---"
+          echo "${{ steps.meta-release.outputs.tags }}"
+          echo "--------------------------------------"
+          for tag in $(echo "${{ steps.meta-release.outputs.tags }}" | tr '\n' ' '); do
+            echo "Pushing release tag: $tag"
+            docker push "$tag"
+          done
