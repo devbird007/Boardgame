@@ -20,7 +20,7 @@ jobs:
     runs-on: self-hosted
     ## This next line will run for every event except pull requests. 
     ## For pull requests, it'd check if they're merged before executing.
-  # if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     steps:
     - uses: actions/checkout@v4
       with:
@@ -98,7 +98,7 @@ jobs:
           type=raw,value=latest,enable={{is_default_branch}}
 
           # Feature branch/PR tagging for testing
-          type=ref,event=branch
+          type=ref,event=branch,prefix=branch-
           type=ref,event=pr
 
     - name: Build docker image
