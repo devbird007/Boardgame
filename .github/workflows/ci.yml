@@ -104,17 +104,28 @@ jobs:
         cache-from: type=gha # Use Github Actions cache
         cache-to: type=gha,mode=max
 
-    - name: Trivy Image Scan
+    - name: Trivy Image Scan (Dev)
       # This next line shouldn't be here in a production environment 
       # as you want your pipeline to fail if it sees high and
       # critical vulnerabilities in your images.
       continue-on-error: true
       run: |
-        echo "--- Scanning tags ---"
-        # Log the tags that will be scanned
-        echo "${{ steps.meta-dev.outputs.tags }}"
-        echo "----------------------------------"
-        trivy image --format table -o trivy-image-report-dev.html --severity CRITICAL,HIGH ${{ steps.meta-dev.outputs.tags }}
+        echo "Searching for SHA tag in output:"
+        echo "${{ steps.meta-dev.outputs.tags }}" # Log the input for debugging
+        # Find the line containing sha-, trust head -n 1 gets the right one if multiple somehow exist.
+        SHA_TAG_LINE=$(echo "${{ steps.meta-dev.outputs.tags }}" | grep 'sha-' | head -n 1)
+
+        echo "Found line: $SHA_TAG_LINE"
+
+        # Check if the line variable is empty
+        if [ -z "$SHA_TAG_LINE" ]; then
+          echo "ERROR: No tag containing 'sha-' found in metadata output.";
+          exit 1;
+        fi
+
+        # Now run Trivy with the found tag (line)
+        echo "Scanning image tag: $SHA_TAG_LINE"
+        trivy image --format table -o trivy-image-report-dev.html --severity CRITICAL,HIGH ${SHA_TAG_LINE}
 
     - name: Push DEV Docker Image to Dockerhub/DEV-Repository
       # Note: If semantic-release runs before this, you might only want to push if NOT releasing.
