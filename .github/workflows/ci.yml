@@ -114,8 +114,7 @@ jobs:
         # Log the tags that will be scanned
         echo "${{ steps.meta-dev.outputs.tags }}"
         echo "----------------------------------"
-        # Pipe the tags (one per line) into xargs, which appends them as arguments to the trivy command
-        echo "${{ steps.meta-dev.outputs.tags }}" | xargs trivy image --format table -o trivy-image-report-dev.html --severity CRITICAL,HIGH
+        trivy image --format table -o trivy-image-report-dev.html --severity CRITICAL,HIGH ${{ steps.meta-dev.outputs.tags }}
 
     - name: Push DEV Docker Image to Dockerhub/DEV-Repository
       # Note: If semantic-release runs before this, you might only want to push if NOT releasing.
