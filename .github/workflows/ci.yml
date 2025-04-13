@@ -55,8 +55,10 @@ jobs:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
 
-    - name: Install jq (Dev)
-      run: sudo apt-get update && sudo apt-get install -y jq
+    # jq is already installed on the self-hosted runner
+    # This block should only be uncommented if the workflow is being run on a Github (ephemeral) runner
+    # - name: Install jq
+    # run: sudo apt-get update && sudo apt-get install -y jq
     
     - name: SonarQube Quality Gate check (Dev)
       id: sonarqube-quality-gate-check-dev
