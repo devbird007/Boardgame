@@ -74,8 +74,8 @@ jobs:
           # NOTE: Pushing to the main production image name
           images: ${{ vars.DOCKERHUB_USERNAME }}/boardgame
           tags: |
+            type=semver,pattern={{version}}     # v1.2.3
             type=semver,pattern={{major.minor}}   # v1.2
-#            type=semver,pattern={{version}}     # v1.2.3
 #            type=semver,pattern={{major}}       # v1
 #            type=raw,value=latest               # latest
 #            type=sha,prefix=sha-,format=short   # sha-a1b2c3d
