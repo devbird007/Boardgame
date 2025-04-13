@@ -102,29 +102,29 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # - name: Trivy Image Scan (Release)
-      #   # This next line shouldn't be here in a production environment 
-      #   # as you want your pipeline to fail if it sees high and
-      #   # critical vulnerabilities in your images.
-      #   continue-on-error: true
-      #   run: |
-      #     echo "Searching for SHA tag in output:"
-      #     echo "${{ steps.meta-release.outputs.tags }}" # Log the input for debugging
-      #     # Find the line containing sha-, trust head -n 1 gets the right one if multiple somehow exist.
-      #     SHA_TAG_LINE=$(echo "${{ steps.meta-release.outputs.tags }}" | grep 'sha-' | head -n 1)
+      - name: Trivy Image Scan (Release)
+        # This next line shouldn't be here in a production environment 
+        # as you want your pipeline to fail if it sees high and
+        # critical vulnerabilities in your images.
+        continue-on-error: true
+        run: |
+          echo "Searching for SHA tag in output:"
+          echo "${{ steps.meta-release.outputs.tags }}" # Log the input for debugging
+          # Find the line containing sha-, trust head -n 1 gets the right one if multiple somehow exist.
+          SHA_TAG_LINE=$(echo "${{ steps.meta-release.outputs.tags }}" | grep 'sha-' | head -n 1)
 
-      #     echo "Found line: $SHA_TAG_LINE"
+          echo "Found line: $SHA_TAG_LINE"
 
-      #     # Check if the line variable is empty
-      #     if [ -z "$SHA_TAG_LINE" ]; then
-      #       echo "ERROR: No tag containing 'sha-' found in metadata output.";
-      #       # exit 1;
-      #       continue
-      #     fi
+          # Check if the line variable is empty
+          if [ -z "$SHA_TAG_LINE" ]; then
+            echo "ERROR: No tag containing 'sha-' found in metadata output.";
+            # exit 1;
+            continue
+          fi
 
-      #     # Now run Trivy with the found tag (line)
-      #     echo "Scanning image tag: $SHA_TAG_LINE"
-      #     trivy image --format table -o trivy-image-report-release.html --severity CRITICAL,HIGH ${SHA_TAG_LINE}
+          # Now run Trivy with the found tag (line)
+          echo "Scanning image tag: $SHA_TAG_LINE"
+          trivy image --format table -o trivy-image-report-release.html --severity CRITICAL,HIGH ${SHA_TAG_LINE}
 
       - name: Push RELEASE Docker image to Dockerhub/RELEASE-Repository
         if: success()
