@@ -80,6 +80,19 @@ jobs:
             type=raw,value=latest               # latest
             type=sha,prefix=sha-,format=short   # sha-a1b2c3d
 
+      - name: Log Raw Metadata Output
+        shell: bash
+        run: |
+          echo "--- Raw Tags Output ---"
+          echo "${{ steps.meta-release.outputs.tags }}"
+          echo "--- End Raw Tags ---"
+          echo "--- JSON Output ---"
+          # The JSON output is often more structured and revealing
+          echo '${{ steps.meta-release.outputs.json }}'
+          echo "--- End JSON ---"
+
+
+
       - name: Build RELEASE docker image
         uses: docker/build-push-action@v6
         with:
