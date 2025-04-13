@@ -69,7 +69,7 @@ jobs:
 
       - name: Extract RELEASE metadata (tags, labels) for Docker
         id: meta-release
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v5.7.0
         with:
           # NOTE: Pushing to the main production image name
           images: ${{ vars.DOCKERHUB_USERNAME }}/boardgame
