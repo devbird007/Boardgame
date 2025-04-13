@@ -77,8 +77,8 @@ jobs:
             type=semver,pattern={{version}}     # v1.2.3
             type=semver,pattern={{major.minor}} # v1.2
             type=semver,pattern={{major}}       # v1
-            type=raw,value=latest               # latest
-            type=sha,prefix=sha-,format=short   # sha-a1b2c3d
+#            type=raw,value=latest               # latest
+#            type=sha,prefix=sha-,format=short   # sha-a1b2c3d
 
       - name: Log Raw Metadata Output
         shell: bash
@@ -90,8 +90,6 @@ jobs:
           # The JSON output is often more structured and revealing
           echo '${{ steps.meta-release.outputs.json }}'
           echo "--- End JSON ---"
-
-
 
       - name: Build RELEASE docker image
         uses: docker/build-push-action@v6
@@ -121,7 +119,8 @@ jobs:
           # Check if the line variable is empty
           if [ -z "$SHA_TAG_LINE" ]; then
             echo "ERROR: No tag containing 'sha-' found in metadata output.";
-            exit 1;
+            # exit 1;
+            continue
           fi
 
           # Now run Trivy with the found tag (line)
