@@ -79,7 +79,6 @@ jobs:
             type=sha,prefix=sha-,format=short   # sha-a1b2c3d
 
       - name: Build RELEASE docker image
-        id: docker_build_release
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -91,7 +90,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Trivy Image Scan (Dev)
+      - name: Trivy Image Scan (Release)
         # This next line shouldn't be here in a production environment 
         # as you want your pipeline to fail if it sees high and
         # critical vulnerabilities in your images.
@@ -112,15 +111,17 @@ jobs:
 
           # Now run Trivy with the found tag (line)
           echo "Scanning image tag: $SHA_TAG_LINE"
-          trivy image --format table -o trivy-image-report-dev.html --severity CRITICAL,HIGH ${SHA_TAG_LINE}
+          trivy image --format table -o trivy-image-report-release.html --severity CRITICAL,HIGH ${SHA_TAG_LINE}
 
       - name: Push RELEASE Docker image to Dockerhub/RELEASE-Repository
         if: success()
-        run: |
-          echo "--- Pushing RELEASE Docker Tags ---"
-          echo "${{ steps.meta-release.outputs.tags }}"
-          echo "--------------------------------------"
-          for tag in $(echo "${{ steps.meta-release.outputs.tags }}" | tr '\n' ' '); do
-            echo "Pushing release tag: $tag"
-            docker push "$tag"
-          done
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta-release.outputs.tags }}
+          labels: ${{ steps.meta-release.outputs.labels }}
+          # Leverage cache from the previous build step
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

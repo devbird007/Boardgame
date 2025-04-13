@@ -92,7 +92,6 @@ jobs:
           type=ref,event=branch,prefix=branch-
 
     - name: Build DEV docker image
-      id: docker_build_dev
       uses: docker/build-push-action@v6
       with:
         context: .
@@ -131,12 +130,13 @@ jobs:
       # Note: If semantic-release runs before this, you might only want to push if NOT releasing.
       # but as discussed, pushing the dev SHA is often fine anyway.
       if: success()
-      run: |
-        echo "--- Pushing DEV Docker Tags ---"
-        echo "${{ steps.meta-dev.outputs.tags }}"
-        echo "------------------------------"
-
-        for tag in $(echo "${{ steps.meta-dev.outputs.tags }}" | tr '\n' ' '); do
-          echo "Pushing dev tag: $tag"
-          docker push "$tag"
-        done
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta-dev.outputs.tags }}
+        labels: ${{ steps.meta-dev.outputs.labels }}
+        # Leverage cache from the previous build step
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
