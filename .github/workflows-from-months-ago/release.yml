@@ -10,8 +10,7 @@ jobs:
   # Job: Build and Push Release to Production Registry
   release:
     name: Release (Tags)
-    # runs-on: self-hosted
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Checkout Code (Release)
@@ -29,31 +28,31 @@ jobs:
       - name: Build with Maven (Release)
         run: mvn -B package --file pom.xml
 
-      # - name: Trivy FS Scan (Release)
-      #   run: |
-      #     trivy fs --format table -o trivy-fs-report-release.html .
+      - name: Trivy FS Scan (Release)
+        run: |
+          trivy fs --format table -o trivy-fs-report-release.html .
 
-    #   - name: SonarQube Scan (Release)
-    #     uses: SonarSource/sonarqube-scan-action@v5.0.0
-    #     env:
-    #       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-    #       SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+      - name: SonarQube Scan (Release)
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
 
-    # # jq is already installed on the self-hosted runner
-    # # This block should only be uncommented if the workflow is being run on a Github (ephemeral) runner
-    #   - name: Install jq
-    #     run: sudo apt-get update && sudo apt-get install -y jq
+    # jq is already installed on the self-hosted runner
+    # This block should only be uncommented if the workflow is being run on a Github (ephemeral) runner
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
-    #   - name: SonarQube Quality Gate check (Release)
-    #     id: sonarqube-quality-gate-check-release
-    #     uses: SonarSource/sonarqube-quality-gate-action@v1.1.0
-    #     timeout-minutes: 3
-    #     env:
-    #       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-    #       SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+      - name: SonarQube Quality Gate check (Release)
+        id: sonarqube-quality-gate-check-release
+        uses: SonarSource/sonarqube-quality-gate-action@v1.1.0
+        timeout-minutes: 3
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
 
-    #   - name: Show SonarQube Quality Gate Status value (Release)
-    #     run: echo "Release Build - SonarQube Quality Gate status is ${{ steps.sonarqube-quality-gate-check-release.outputs.quality-gate-status }}"
+      - name: Show SonarQube Quality Gate Status value (Release)
+        run: echo "Release Build - SonarQube Quality Gate status is ${{ steps.sonarqube-quality-gate-check-release.outputs.quality-gate-status }}"
 
       # --- Docker Steps for PRODUCTION Environment ---
       - name: Set up QEMU (Release)
