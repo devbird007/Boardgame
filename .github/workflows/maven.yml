@@ -73,6 +73,47 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
         
+    - name: Extract Metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev
+        tags: |
+          type=sha,prefix=sha-,format=short
+          type=ref,event=branch,prefix=branch-
 
+    - name: Build Docker Image
+      id: docker_build
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ./Dockerfile
+        load: true
+        push: false
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha # To use Github Actions cache
+        cache-to: type=gha,mode=max
 
+    - name: Trivy Image Scan
+# --- This next line shouldn't be here in a real production environment,
+# --- as you don't actually want your pipeline to fail if it sees
+# --- vulnerabilities rated high and critical in your images
+      continue-on-error: true
+      run: |
+        echo "Searching for SHA tag in output:"
+        echo "${{ steps.meta.outputs.tags }}" # Log the input for debugging
+        # Find the line containing sha-, trust head -n 1 gets the right one if multiple somehow exist.
+        SHA_TAG_LINE=$(echo "$ {{ steps.meta.outputs.tags }}" | grep 'sha-' | head -n 1)
 
+        echo "Found line: $SHA_TAG_LINE"
+
+        # Check if the line variable is empty
+        if [ -z "$SHA_TAG_LINE" ]; then
+          echo "ERROR: No tag containing 'sha-' found in the metadata output.";
+          exit 1;
+        fi
+
+        # Now run Trivy with the found tag (line)
+        echo "Scanning image tag: $SHA_TAG_LINE"
+        trivy image --format table -o trivy-image-report-dev.html --security CRITICAL,HIGH ${SHA_TAG_LINE}
