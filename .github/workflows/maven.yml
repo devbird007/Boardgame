@@ -144,4 +144,4 @@ jobs:
 
           # Now run Trivy with the found tag (line)
           echo "Scanning image tag: $SHA_TAG_LINE"
-          trivy image --format table -o trivy-image-report-dev.html --security CRITICAL,HIGH ${SHA_TAG_LINE}
+          trivy image --format table -o trivy-image-report-dev.html --severity CRITICAL,HIGH ${SHA_TAG_LINE}
