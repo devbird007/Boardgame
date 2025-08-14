@@ -107,7 +107,7 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev
           tags: |
-            type=sha,prefix=,format=short
+            type=sha,prefix=sha-,format=short
             type=ref,event=branch,prefix=branch-
 
       - name: Build Docker Image
