@@ -8,8 +8,12 @@ jobs:
   # Job 1: Build the Java application and run tests
   build-and-test:
     runs-on: self-hosted
+
+    env:
+      ARTIFACT_NAME: boardgame-${{ github.sha }}
+
     outputs:
-      artifact_name: boardgame
+      artifact_name: ${{ env.ARTIFACT_NAME }}
 
     steps:
       - name: Checkout Code
@@ -28,7 +32,7 @@ jobs:
         run: mvn -B package --file pom.xml
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ job.outputs.artifact_name }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: target/*.jar
 
   # Job 2: Run static analysis.
