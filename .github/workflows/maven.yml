@@ -5,115 +5,139 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
-
+  # Job 1: Build the Java application and run tests
+  build-and-test:
     runs-on: self-hosted
+    outputs:
+      artifact_name: boardgame-{{ github.sha }}
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # Fetches all history and tags for better versioning
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches all history and tags for better versioning
 
-    # --- Set up Java, compile, test and build the artifact ---
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: maven
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
 
-    - name: Build with Maven
-      run: mvn -B package --file pom.xml
+      - name: Build with Maven
+        run: mvn -B package --file pom.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ job.outputs.artifact_name }}
+          path: target/*.jar
 
-    - uses: actions/upload-artifact@v4
-      with:
-        name: Boardgame
-        path: target/*.jar
+  # Job 2: Run static analysis.
+  static-analysis:
+    runs-on: self-hosted
+    needs: build-and-test
 
-    # --- Scan with Trivy, Scan with Sonarqube and check Quality Gate status ---
-    - name: Trivy FS scan
-      run: |
-        trivy fs --format table -o trivy-fs-report.html .
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: SonarQube Scan
-      uses: sonarsource/sonarqube-scan-action@master
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      
-    # jq is already installed on the self-hosted runner
-    # This block should only be uncommented if the workflow is being run on a Github (ephemeral) runner
-    # - name: Install jq
-    # run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Trivy FS scan
+        run: |
+          trivy fs --format table -o trivy-fs-report.html .
 
-    # Check the Quality Gate status
-    - name: SonarQube Quality Gate check
-      id: sonarqube-quality-gate-check
-      uses: sonarsource/sonarqube-quality-gate-action@master
-      with:
-        pollingTimeoutSec: 300
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-    - name: "Show SonarQube Quality Gate Status value"
-      run: echo "The Quality Gate status is ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
+      # jq is already installed on the self-hosted runner
+      # This block should only be uncommented if the workflow is being run on a Github (ephemeral) runner
+      # - name: Install jq
+      # run: sudo apt-get update && sudo apt-get install -y jq
 
-    # --- Setting up Docker ---
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+      - name: SonarQube Quality Gate check
+        id: sonarqube-quality-gate-check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        with:
+          pollingTimeoutSec: 300
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: "Show SonarQube Quality Gate Status value"
+        run: echo "The Quality Gate status is ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-        
-    - name: Extract Metadata (tags, labels) for Docker
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev
-        tags: |
-          type=sha,prefix=sha-,format=short
-          type=ref,event=branch,prefix=branch-
+# Job 3: Build and push the Docker Image(s)
+  package-docker:
+    runs-on: self-hosted
+    needs:
+      - build-and-test
+      - static-analysis
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+      version: ${{ steps.meta.outputs.version }}
 
-    - name: Build Docker Image
-      id: docker_build
-      uses: docker/build-push-action@v6
-      with:
-        context: .
-        file: ./Dockerfile
-        load: true
-        push: false
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha # To use Github Actions cache
-        cache-to: type=gha,mode=max
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Trivy Image Scan
-# --- This next line shouldn't be here in a real production environment,
-# --- as you don't actually want your pipeline to fail if it sees
-# --- vulnerabilities rated high and critical in your images
-      continue-on-error: true
-      run: |
-        echo "Searching for SHA tag in output:"
-        echo "${{ steps.meta.outputs.tags }}" # Log the input for debugging
-        # Find the line containing sha-, trust head -n 1 gets the right one if multiple somehow exist.
-        SHA_TAG_LINE=$(echo "$ {{ steps.meta.outputs.tags }}" | grep 'sha-' | head -n 1)
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-and-test.outputs.artifact_name }}
+          path: target/
 
-        echo "Found line: $SHA_TAG_LINE"
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-        # Check if the line variable is empty
-        if [ -z "$SHA_TAG_LINE" ]; then
-          echo "ERROR: No tag containing 'sha-' found in the metadata output.";
-          exit 1;
-        fi
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-        # Now run Trivy with the found tag (line)
-        echo "Scanning image tag: $SHA_TAG_LINE"
-        trivy image --format table -o trivy-image-report-dev.html --security CRITICAL,HIGH ${SHA_TAG_LINE}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract Metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev
+          tags: |
+            type=sha,prefix=,format=short
+            type=ref,event=branch,prefix=branch-
+
+      - name: Build Docker Image
+        id: docker_build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha # To use Github Actions cache
+          cache-to: type=gha,mode=max
+
+      - name: Trivy Image Scan
+  # --- This next line shouldn't be here in a real production environment,
+  # --- as you don't actually want your pipeline to fail if it sees
+  # --- vulnerabilities rated high and critical in your images
+        continue-on-error: true
+        run: |
+          echo "Searching for SHA tag in output:"
+          echo "${{ steps.meta.outputs.tags }}" # Log the input for debugging
+          # Find the line containing sha-, trust head -n 1 gets the right one if multiple somehow exist.
+          SHA_TAG_LINE=$(echo "${{ steps.meta.outputs.tags }}" | grep 'sha-' | head -n 1)
+
+          echo "Found line: $SHA_TAG_LINE"
+
+          # Check if the line variable is empty
+          if [ -z "$SHA_TAG_LINE" ]; then
+            echo "ERROR: No tag containing 'sha-' found in the metadata output.";
+            exit 1;
+          fi
+
+          # Now run Trivy with the found tag (line)
+          echo "Scanning image tag: $SHA_TAG_LINE"
+          trivy image --format table -o trivy-image-report-dev.html --security CRITICAL,HIGH ${SHA_TAG_LINE}
