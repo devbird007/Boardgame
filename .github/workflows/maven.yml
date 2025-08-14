@@ -9,7 +9,7 @@ jobs:
   build-and-test:
     runs-on: self-hosted
     outputs:
-      artifact_name: boardgame-{{ github.sha }}
+      artifact_name: boardgame
 
     steps:
       - name: Checkout Code
