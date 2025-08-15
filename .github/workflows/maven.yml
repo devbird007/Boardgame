@@ -137,7 +137,7 @@ jobs:
           echo "Scanning image: ${IMAGE_TO_SCAN}"
 
           trivy image --exit-code 1 --severity CRITICAL,HIGH \
-            --format table -o trivy-image-report.html \
+            --format table -o trivy-image-report-dev.html \
             "${IMAGE_TO_SCAN}"
 
       - name: Upload Trivy Image Scan Report
