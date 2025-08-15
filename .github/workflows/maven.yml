@@ -38,14 +38,20 @@ jobs:
   # Job 2: Run static analysis.
   static-analysis:
     runs-on: self-hosted
-    needs: build-and-test
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Trivy FS scan
         run: |
-          trivy fs --format table -o trivy-fs-report.html .
+          trivy fs --format table -o trivy-fs-report-dev.html .
+
+      - name: Upload Trivy FS Scan Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-fs-report
+          path: trivy-fs-report-dev.html
 
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@master
@@ -73,11 +79,8 @@ jobs:
 # Job 3: Build and push the Docker Image(s)
   package-docker:
     runs-on: self-hosted
-    needs:
-      - build-and-test
-      - static-analysis
+    needs: build-and-test
     outputs:
-      tags: ${{ steps.meta.outputs.tags }}
       version: ${{ steps.meta.outputs.version }}
 
     steps:
@@ -123,30 +126,21 @@ jobs:
           cache-from: type=gha # To use Github Actions cache
           cache-to: type=gha,mode=max
 
+  scan-image:
+    runs-on: self-hosted
+    needs: package-docker
+    steps:
       - name: Trivy Image Scan
-  # --- This next line shouldn't be here in a real production environment,
-  # --- as you don't actually want your pipeline to fail if it sees
-  # --- vulnerabilities rated high and critical in your images
-        continue-on-error: true
         run: |
-          echo "Searching for SHA tag in output:"
-          echo "${{ steps.meta.outputs.tags }}" # Log the input for debugging
-          # Find the line containing sha-, trust head -n 1 gets the right one if multiple somehow exist.
-          SHA_TAG_LINE=$(echo "${{ steps.meta.outputs.tags }}" | grep 'sha-' | head -n 1)
+          IMAGE_TO_SCAN="${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev:${{ needs.package-docker.outputs.version }}"
 
-          echo "Found line: $SHA_TAG_LINE"
+          echo "Scanning image: ${IMAGE_TO_SCAN}"
 
-          # Check if the line variable is empty
-          if [ -z "$SHA_TAG_LINE" ]; then
-            echo "ERROR: No tag containing 'sha-' found in the metadata output.";
-            exit 1;
-          fi
+          trivy image --exit-code 1 --severity CRITICAL,HIGH \
+            --format table -o trivy-image-report.html \
+            "${IMAGE_TO_SCAN}"
 
-          # Now run Trivy with the found tag (line)
-          echo "Scanning image tag: $SHA_TAG_LINE"
-          trivy image --format table -o trivy-image-report-dev.html --severity CRITICAL,HIGH ${SHA_TAG_LINE}
-
-      - name: Upload Trivy Scan Report
+      - name: Upload Trivy Image Scan Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
