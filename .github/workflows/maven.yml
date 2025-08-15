@@ -145,3 +145,10 @@ jobs:
           # Now run Trivy with the found tag (line)
           echo "Scanning image tag: $SHA_TAG_LINE"
           trivy image --format table -o trivy-image-report-dev.html --severity CRITICAL,HIGH ${SHA_TAG_LINE}
+
+      - name: Upload Trivy Scan Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-report
+          path: trivy-image-report-dev.html
