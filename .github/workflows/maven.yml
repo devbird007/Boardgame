@@ -76,12 +76,10 @@ jobs:
       - name: "Show SonarQube Quality Gate Status value"
         run: echo "The Quality Gate status is ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
 
-# Job 3: Build and push the Docker Image(s)
+  # Job 3: Build and push the Docker Image(s)
   package-docker:
     runs-on: self-hosted
     needs: build-and-test
-    outputs:
-      version: ${{ steps.meta.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -91,7 +89,8 @@ jobs:
         with:
           name: ${{ needs.build-and-test.outputs.artifact_name }}
           path: target/
-
+      
+      # --- Docker Setup Steps ---
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -110,9 +109,10 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev
           tags: |
-            type=sha,prefix=sha-,format=short
+            type=sha,prefix=sha-,format=short,priority=700
             type=ref,event=branch,prefix=branch-
 
+      # --- Build Image Locally ---
       - name: Build Docker Image
         id: docker_build
         uses: docker/build-push-action@v6
@@ -126,13 +126,10 @@ jobs:
           cache-from: type=gha # To use Github Actions cache
           cache-to: type=gha,mode=max
 
-  scan-image:
-    runs-on: self-hosted
-    needs: package-docker
-    steps:
+      # --- Scan the Local Image ---
       - name: Trivy Image Scan
         run: |
-          IMAGE_TO_SCAN="${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev:${{ needs.package-docker.outputs.version }}"
+          IMAGE_TO_SCAN="${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev:${{ steps.meta.outputs.version }}"
 
           echo "Scanning image: ${IMAGE_TO_SCAN}"
 
@@ -146,3 +143,14 @@ jobs:
         with:
           name: trivy-image-report
           path: trivy-image-report-dev.html
+
+      # --- Push the Image ---
+      - name: Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
