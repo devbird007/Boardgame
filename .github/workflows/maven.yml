@@ -145,12 +145,7 @@ jobs:
           path: trivy-image-report-dev.html
 
       # --- Push the Image ---
-      - name: Push Docker Image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Push Docker Image Tags to Registry
+        if: success() # Only push if the scan step passes
+        run: |
+          echo "${{ steps.meta.outputs.tags }}" | xargs -n 1 docker push
