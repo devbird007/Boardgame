@@ -4,16 +4,14 @@ on:
   push:
     branches: [ "main" ]
 
+env:
+  ARTIFACT_NAME: boardgame-${{ github.sha }}
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev
+
 jobs:
   # Job 1: Build the Java application and run tests
   build-and-test:
     runs-on: self-hosted
-
-    env:
-      ARTIFACT_NAME: boardgame-${{ github.sha }}
-
-    outputs:
-      artifact_name: ${{ env.ARTIFACT_NAME }}
 
     steps:
       - name: Checkout Code
@@ -38,9 +36,11 @@ jobs:
   # Job 2: Run static analysis.
   static-analysis:
     runs-on: self-hosted
+    needs: build-and-test
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Trivy FS scan
         run: |
@@ -79,15 +79,18 @@ jobs:
   # Job 3: Build and push the Docker Image(s)
   package-docker:
     runs-on: self-hosted
-    needs: build-and-test
+    needs: static-analysis
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.build-and-test.outputs.artifact_name }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: target/
       
       # --- Docker Setup Steps ---
@@ -107,7 +110,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=sha-,format=short,priority=700
             type=ref,event=branch,prefix=branch-
@@ -129,7 +132,7 @@ jobs:
       # --- Scan the Local Image ---
       - name: Trivy Image Scan
         run: |
-          IMAGE_TO_SCAN="${{ secrets.DOCKERHUB_USERNAME }}/boardgame-dev:${{ steps.meta.outputs.version }}"
+          IMAGE_TO_SCAN="${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}"
 
           echo "Scanning image: ${IMAGE_TO_SCAN}"
 
@@ -149,3 +152,31 @@ jobs:
         if: success() # Only push if the scan step passes
         run: |
           echo "${{ steps.meta.outputs.tags }}" | xargs -n 1 docker push
+
+  # Job 4: Deploy to Kubernetes
+  deploy:
+    runs-on: self-hosted
+    needs: package-docker
+    env:
+      IMAGE_TAG: ${{ needs.package-docker.outputs.image_tag }}
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Update Kubernetes Manifest
+        run: |
+          FULL_IMAGE_NAME="${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          yq -i '.spec.template.spec.containers[0].image = "'"$FULL_IMAGE_NAME"'"' k8s/deployment.yaml
+
+      - name: Kubectl Action
+        uses: tale/kubectl-action@v1
+        with:
+          base64-kube-config: ${{ secrets.KUBECONFIG }}
+
+      - name: Deploy to Cluster and Verify
+        run: |
+          kubectl apply -f k8s/
+          echo "Waiting for deployment to complete..."
+          kubectl rollout status deployment/boardgame-deployment -n webapps --timeout=120s
+          kubectl get services -n webapps

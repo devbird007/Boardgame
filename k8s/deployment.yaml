@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: boardgame-deployment
+  namespace: webapps
+spec:
+  selector:
+    matchLabels:
+      app: boardgame
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: boardgame
+    spec:
+      containers:
+        - name: boardgame
+          # The ci pipeline modifies the image value here to the name of the image it builds. This file is then executed in the cluster.
+          image: mannyops/boardgame
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
