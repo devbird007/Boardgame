@@ -167,7 +167,7 @@ jobs:
       - name: Update Kubernetes Manifest
         run: |
           FULL_IMAGE_NAME="${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
-          yq -i '.spec.template.spec.containers[0].image = "'"$FULL_IMAGE_NAME"'"' k8s/deployment.yaml
+          yq -iy '.spec.template.spec.containers[0].image = "'"$FULL_IMAGE_NAME"'"' k8s/deployment.yaml
 
       - name: Kubectl Action
         uses: tale/kubectl-action@v1
